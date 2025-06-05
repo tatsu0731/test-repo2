@@ -1,0 +1,26 @@
+[
+    {
+        "title": "[section1]Headerの作成",
+        "body": "## ✅ やることリスト\n\n- [ ] リポジトリをローカルにクローンする\n- [ ] `README.md` を更新する\n- [ ] GitHub Pagesの設定を確認する\n\n---\n\n### 📌 参考リンク\n- [Gitの基本操作まとめ](https://example.com/git-guide)\n- [開発フロー](https://example.com/dev-flow)\n\n📝 必要であれば画像やコードブロックもOK！",
+        "labels": ["design", "review"],
+        "assignees": ["your-github-username"]
+    },
+    {
+        "title": "[section1]Headerの作成",
+        "body": "## ✅ やることリスト\n\n- [ ] リポジトリをローカルにクローンする\n- [ ] `README.md` を更新する\n- [ ] GitHub Pagesの設定を確認する\n\n---\n\n### 📌 参考リンク\n- [Gitの基本操作まとめ](https://example.com/git-guide)\n- [開発フロー](https://example.com/dev-flow)\n\n📝 必要であれば画像やコードブロックもOK！",
+        "labels": ["design", "review"],
+        "assignees": ["your-github-username"]
+    },
+    {
+        "title": "[section1]Headerの作成",
+        "body": "### 🛠 使用技術\n- React\n- TypeScript\n- Vite\n\n### 💡 セットアップ手順\n```\nnpm install\nnpm run dev\n```\n\n---\n\n担当: ",
+        "labels": ["design", "review"],
+        "assignees": ["your-github-username"]
+    },
+    {
+        "title": "[section1]Headerの作成",
+        "body": "[section1]Headerの作成",
+        "labels": ["design", "review"],
+        "assignees": ["your-github-username"]
+    }
+]
