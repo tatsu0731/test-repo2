@@ -3,14 +3,14 @@ name: Init Multiple Issues
 on:
   push:
     paths:
-      - '.github/init-issues.json'
+      - '.github/init-issues.json' # このJSONファイルが変更されたときにトリガー
     branches:
       - main
-  workflow_dispatch:
+  workflow_dispatch: # 手動実行も可能
 
 permissions:
-  contents: read
-  issues: write
+  contents: read   # リポジトリのコンテンツ（JSONファイル）の読み取りに必要
+  issues: write    # Issueの作成に必要
 
 jobs:
   create_issues:
@@ -18,25 +18,107 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # バージョンをv4に更新 (任意)
         with:
-          ref: main
+          ref: main # mainブランチの最新のJSONファイルを参照
 
       - name: Create Issues from JSON
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7 # バージョンをv7に更新 (任意)
+        # github-token: ${{ secrets.PERSONAL_TOKEN }} # PERSONAL_TOKEN を使う場合はこの行を有効化し、下の行をコメントアウト
+        # github-token プロパティを省略すると、デフォルトで secrets.GITHUB_TOKEN が使用されます。
+        # permissions で issues:write が設定されていれば通常はこちらで十分です。
         with:
-          github-token: ${{ secrets.PERSONAL_TOKEN }} 
           script: |
             const fs = require('fs');
-            const issues = JSON.parse(fs.readFileSync('.github/init-issues.json', 'utf8'));
+            const core = require('@actions/core'); // coreライブラリを読み込み
+            const issuesFilePath = '.github/init-issues.json';
+            let issueDefinitions;
 
-            for (const issue of issues) {
-              await github.rest.issues.create({
+            core.info(`Attempting to read issues from: ${issuesFilePath}`);
+            try {
+              const fileContents = fs.readFileSync(issuesFilePath, 'utf8');
+              issueDefinitions = JSON.parse(fileContents);
+            } catch (error) {
+              core.setFailed(`Failed to read or parse ${issuesFilePath}: ${error.message}`);
+              return;
+            }
+
+            if (!Array.isArray(issueDefinitions)) {
+              core.setFailed(`Error: ${issuesFilePath} must contain an array of issue definitions.`);
+              return;
+            }
+
+            core.info(`Found ${issueDefinitions.length} issue definitions in ${issuesFilePath}.`);
+
+            // 既存のIssueタイトルを取得 (重複チェックのため)
+            let existingIssueTitles = [];
+            try {
+              core.info('Fetching existing issues for duplicate checking...');
+              const { data: currentIssues } = await github.rest.issues.listForRepo({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: issue.title,
-                body: issue.body,
-                labels: issue.labels,
-                assignees: issue.assignees
+                state: 'all', // open と closed の両方をチェック
               });
+              existingIssueTitles = currentIssues.map(issue => issue.title);
+              core.info(`Found ${existingIssueTitles.length} existing issues.`);
+            } catch (error) {
+              // 既存Issueの取得に失敗しても処理は続行するが、警告を出す
+              core.warning(`Could not fetch existing issues for duplicate checking: ${error.message}. Duplicate checks will be skipped for new issues.`);
+            }
+
+            let createdCount = 0;
+            let skippedCount = 0;
+            let errorCount = 0;
+
+            for (const issueDef of issueDefinitions) {
+              if (!issueDef.title || typeof issueDef.title !== 'string' || issueDef.title.trim() === '') {
+                core.warning(`Skipping issue creation due to missing or invalid title in definition: ${JSON.stringify(issueDef)}`);
+                errorCount++;
+                continue;
+              }
+
+              // 重複チェック (既存Issueの取得に成功していれば)
+              if (existingIssueTitles.length > 0 && existingIssueTitles.includes(issueDef.title)) {
+                core.info(`Issue with title "${issueDef.title}" already exists. Skipping.`);
+                skippedCount++;
+                continue;
+              }
+
+              try {
+                core.info(`Creating issue: "${issueDef.title}"`);
+                const issuePayload = {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueDef.title,
+                  body: issueDef.body || '', // bodyがなければ空文字
+                  labels: issueDef.labels || [], // labelsがなければ空配列
+                  assignees: issueDef.assignees || [] // assigneesがなければ空配列
+                };
+
+                const { data: createdIssue } = await github.rest.issues.create(issuePayload);
+                core.info(`Successfully created issue: ${createdIssue.html_url}`);
+                createdCount++;
+              } catch (error) {
+                core.error(`Failed to create issue "${issueDef.title}": ${error.message}`);
+                if (error.response && error.response.data) { // Log more details if available
+                    core.error(`Response data: ${JSON.stringify(error.response.data)}`);
+                }
+                if (error.status === 422) { // Unprocessable Entity
+                  core.error(`  This might be due to non-existent labels or assignees. Ensure labels ${JSON.stringify(issueDef.labels)} and assignees ${JSON.stringify(issueDef.assignees)} exist in the repository.`);
+                }
+                errorCount++;
+                // 一つのIssue作成失敗でワークフロー全体を失敗させない場合は、ここでは core.setFailed しない
+              }
+            }
+
+            core.summary(`Issue Creation Summary:
+              - Successfully created: ${createdCount}
+              - Skipped (already exist): ${skippedCount}
+              - Failed or with warnings: ${errorCount}`);
+            
+            if (errorCount > 0) {
+              // 最終的にエラーがあった場合はワークフローを失敗扱いにするか、警告に留めるか選択できます。
+              // ここでは警告としてログに残し、ワークフロー自体は成功とします。
+              // 失敗扱いにしたい場合は core.setFailed を使用します。
+              core.warning('Some issues could not be created or had warnings. Check the logs above.');
             }
